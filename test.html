@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Outpost Blitz: Custom Controls Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0f172a;
+      touch-action: none;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    .glass {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+    .hud-draggable {
+      touch-action: none;
+    }
+    .editing-outline {
+      outline: 2px dashed #facc15 !important;
+      background: rgba(250, 204, 21, 0.18) !important;
+      cursor: move !important;
+    }
+  </style>
+</head>
+<body class="relative text-white" oncontextmenu="return false;">
+
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Top HUD -->
+  <div id="hud" class="fixed top-0 left-0 right-0 p-3 md:p-5 flex justify-between items-start pointer-events-none z-10">
+    <!-- Player Stats -->
+    <div class="glass rounded-xl p-3 w-56 md:w-64 shadow-lg pointer-events-auto">
+      <div class="flex justify-between items-center mb-1.5 border-b border-slate-700/80 pb-1">
+        <span id="hudPlayerName" class="text-xs md:text-sm font-black tracking-wide text-amber-400 truncate max-w-[140px]">SHADOW</span>
+        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">OPERATIVE</span>
+      </div>
+
+      <div class="flex justify-between items-center text-xs font-bold tracking-wider uppercase text-slate-300 mb-1">
+        <span>HP</span>
+        <span id="hpText">100 / 100</span>
+      </div>
+      <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mb-2 border border-slate-700">
+        <div id="hpBar" class="bg-emerald-500 h-full transition-all duration-150" style="width: 100%;"></div>
+      </div>
+
+      <div class="flex justify-between items-center text-xs font-bold tracking-wider uppercase text-slate-300 mb-1">
+        <span>Armor</span>
+        <span id="armorText">50 / 100</span>
+      </div>
+      <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+        <div id="armorBar" class="bg-sky-400 h-full transition-all duration-150" style="width: 50%;"></div>
+      </div>
+
+      <div class="mt-2.5 flex justify-between items-center text-xs text-slate-300 border-t border-slate-700/80 pt-2">
+        <span>WAVE <strong id="waveText" class="text-amber-400 text-sm">1</strong></span>
+        <span>SCORE <strong id="scoreText" class="text-white text-sm">0</strong></span>
+        <span>KILLS <strong id="killsText" class="text-rose-400 text-sm">0</strong></span>
+      </div>
+    </div>
+
+    <!-- Center Pickup Prompt -->
+    <div id="pickupPrompt" class="hidden glass px-4 py-2 rounded-full text-xs md:text-sm font-semibold text-amber-300 border border-amber-400/40 shadow-lg animate-pulse">
+      Press [<span id="promptPickupKey">E</span>] or Tap Pickup to take <span id="pickupGunName" class="underline font-bold">Weapon</span>
+    </div>
+
+    <!-- Right Minimap & Settings Controls -->
+    <div class="flex flex-col items-end gap-2 pointer-events-auto">
+      <canvas id="minimapCanvas" width="110" height="110" class="glass rounded-xl shadow-lg border border-slate-600"></canvas>
+      <div class="flex gap-1.5">
+        <button id="quickSoundBtn" onclick="toggleSoundQuick()" class="glass px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-400 hover:bg-slate-800 active:scale-95 transition">
+          🔊 ON
+        </button>
+        <button onclick="openSettings()" class="glass px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-300 hover:bg-slate-800 active:scale-95 transition">
+          ⚙️ Controls & Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Weapon & Inventory Bar -->
+  <div class="fixed bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2.5 z-10 pointer-events-auto">
+    <!-- Slot 1 -->
+    <div id="slot0" onclick="switchWeapon(0)" class="glass cursor-pointer px-3.5 py-2 rounded-xl border-2 border-amber-400 min-w-[120px] md:min-w-[150px] transition">
+      <div class="flex justify-between text-[10px] text-slate-400 font-bold">
+        <span>SLOT 1 [<span id="hudSlot1Key">1</span>]</span>
+        <span id="slot0Type" class="text-amber-300">SEMI</span>
+      </div>
+      <div id="slot0Name" class="font-bold text-xs md:text-sm truncate text-white">Combat Pistol</div>
+      <div id="slot0Ammo" class="text-xs text-slate-300 font-mono">15 / ∞</div>
+    </div>
+
+    <!-- Slot 2 -->
+    <div id="slot1" onclick="switchWeapon(1)" class="glass cursor-pointer px-3.5 py-2 rounded-xl border-2 border-transparent min-w-[120px] md:min-w-[150px] opacity-75 transition">
+      <div class="flex justify-between text-[10px] text-slate-400 font-bold">
+        <span>SLOT 2 [<span id="hudSlot2Key">2</span>]</span>
+        <span id="slot1Type" class="text-slate-400">-</span>
+      </div>
+      <div id="slot1Name" class="font-bold text-xs md:text-sm truncate text-slate-400">Empty Slot</div>
+      <div id="slot1Ammo" class="text-xs text-slate-500 font-mono">-- / --</div>
+    </div>
+
+    <!-- Desktop Quick Action Button -->
+    <button id="reloadBtnDesktop" onclick="reloadWeapon()" class="hidden md:flex glass px-3 py-2.5 rounded-xl text-xs font-bold text-sky-300 hover:bg-slate-800 active:scale-95">
+      RELOAD [<span id="hudReloadKey">R</span>]
+    </button>
+  </div>
+
+  <!-- ==========================================
+       MOBILE CUSTOMIZABLE TOUCH CONTROLS OVERLAY
+       ========================================== -->
+  <div id="mobileControlsContainer" class="hidden fixed inset-0 pointer-events-none z-20">
+    <!-- Draggable Move Joystick Anchor -->
+    <div id="mobMoveAnchor" data-id="moveStick" class="hud-draggable pointer-events-none fixed flex items-center justify-center rounded-full border-2 border-sky-400/40 bg-slate-900/35"
+      style="width: 110px; height: 110px; left: 40px; bottom: 45px;">
+      <span class="text-[10px] font-bold text-sky-300/70 uppercase tracking-wider">MOVE STICK</span>
+    </div>
+
+    <!-- Draggable Aim Joystick Anchor -->
+    <div id="mobAimAnchor" data-id="aimStick" class="hud-draggable pointer-events-none fixed flex items-center justify-center rounded-full border-2 border-rose-400/40 bg-slate-900/35"
+      style="width: 110px; height: 110px; right: 135px; bottom: 40px;">
+      <span class="text-[10px] font-bold text-rose-300/70 uppercase tracking-wider">AIM STICK</span>
+    </div>
+
+    <!-- Dedicated Mobile FIRE Button -->
+    <button id="mobFireBtn" data-id="fireBtn"
+      class="hud-draggable pointer-events-auto fixed rounded-full bg-gradient-to-br from-rose-500 to-orange-600 text-white font-black text-xs shadow-xl border-2 border-rose-300/80 flex flex-col items-center justify-center active:scale-90 transition-transform"
+      style="width: 78px; height: 78px; right: 32px; bottom: 115px;">
+      <span class="text-base leading-none">🔥</span>
+      <span>FIRE</span>
+    </button>
+
+    <!-- Mobile RELOAD Button -->
+    <button id="mobReloadBtn" data-id="reloadBtn"
+      class="hud-draggable pointer-events-auto fixed rounded-full glass border-2 border-sky-400/70 text-sky-300 font-extrabold text-[11px] shadow-lg flex items-center justify-center active:scale-90"
+      style="width: 58px; height: 58px; right: 38px; bottom: 210px;">
+      RELOAD
+    </button>
+
+    <!-- Mobile SWAP GUN Button -->
+    <button id="mobSwapBtn" data-id="swapBtn"
+      class="hud-draggable pointer-events-auto fixed rounded-full glass border-2 border-purple-400/70 text-purple-300 font-extrabold text-[11px] shadow-lg flex items-center justify-center active:scale-90"
+      style="width: 58px; height: 58px; right: 110px; bottom: 185px;">
+      SWAP
+    </button>
+
+    <!-- Mobile PICK UP Button -->
+    <button id="mobPickupBtn" data-id="pickupBtn"
+      class="hud-draggable pointer-events-auto hidden fixed rounded-full bg-amber-500 text-slate-950 font-black text-[11px] shadow-xl border-2 border-amber-200 flex items-center justify-center active:scale-90"
+      style="width: 64px; height: 64px; right: 190px; bottom: 165px;">
+      PICK UP
+    </button>
+  </div>
+
+  <!-- Mobile Layout Editor Banner -->
+  <div id="layoutEditorBanner" class="hidden fixed top-4 left-1/2 -translate-x-1/2 z-50 glass px-5 py-3 rounded-2xl border-2 border-amber-400 shadow-2xl text-center max-w-md w-[92%]">
+    <div class="text-xs font-black uppercase tracking-wider text-amber-300 mb-1">📱 Mobile Controls Layout Editor</div>
+    <p class="text-[11px] text-slate-300 mb-2.5">Drag the Joysticks, Fire Button, Reload, Swap & Pickup buttons anywhere on screen.</p>
+    <div class="flex items-center justify-center gap-3 mb-2">
+      <span class="text-xs text-slate-300 font-bold">Button Scale:</span>
+      <input id="mobScaleSlider" type="range" min="80" max="135" value="100" oninput="updateMobileButtonScale(this.value)" class="w-32 accent-amber-400" />
+      <span id="mobScaleLabel" class="text-xs font-mono text-amber-300">100%</span>
+    </div>
+    <div class="flex gap-2 justify-center">
+      <button onclick="resetMobileLayout()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 border border-slate-600">
+        Reset Default
+      </button>
+      <button onclick="exitMobileLayoutEditor()" class="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black">
+        ✓ Save Layout
+      </button>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       SETTINGS & CUSTOM CONTROLS MODAL
+       ========================================== -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-40 p-3 md:p-4">
+    <div class="glass max-w-lg w-full rounded-2xl p-5 md:p-6 border border-slate-700 shadow-2xl max-h-[92vh] flex flex-col">
+      <div class="flex justify-between items-center mb-3 border-b border-slate-700 pb-2.5">
+        <h2 class="text-lg font-black tracking-wide text-white">⚙️ GAME & CONTROLS CONFIGURATION</h2>
+        <button onclick="closeSettings()" class="text-slate-400 hover:text-white text-sm font-bold px-2 py-1 rounded">✕</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-1.5 mb-4 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <button id="tabBtnGeneral" onclick="switchSettingsTab('general')" class="flex-1 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition">
+          General & Audio
+        </button>
+        <button id="tabBtnPC" onclick="switchSettingsTab('pc')" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition">
+          💻 System / PC Keys
+        </button>
+        <button id="tabBtnMobile" onclick="switchSettingsTab('mobile')" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition">
+          📱 Mobile Controls
+        </button>
+      </div>
+
+      <!-- Tab 1: General & Audio -->
+      <div id="tabContentGeneral" class="space-y-3.5 text-sm overflow-y-auto pr-1">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1">Player Callsign (Shown While Running)</label>
+          <input id="settingsNameInput" type="text" maxlength="16" placeholder="Enter name..."
+            class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400" />
+        </div>
+
+        <div class="flex items-center justify-between bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+          <div>
+            <div class="font-bold text-white">Enable Sound Effects</div>
+            <div class="text-xs text-slate-400">Synthesized gunfire, reloads & explosions</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="soundToggleCheckbox" class="sr-only peer" checked onchange="updateSettingsFromUI()">
+            <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
+
+        <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-xs font-bold text-slate-300 mb-1.5">
+            <span>MASTER VOLUME</span>
+            <span id="volumeLabel">70%</span>
+          </div>
+          <input id="volumeSlider" type="range" min="0" max="100" value="70" oninput="updateSettingsFromUI()"
+            class="w-full accent-amber-400 cursor-pointer" />
+        </div>
+
+        <button onclick="testAudioSample()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-sky-300 border border-slate-600 transition">
+          🔊 Test Weapon Audio
+        </button>
+      </div>
+
+      <!-- Tab 2: System / PC Keybinds -->
+      <div id="tabContentPC" class="hidden space-y-2.5 text-xs overflow-y-auto pr-1">
+        <p class="text-slate-400 text-[11px] mb-2">
+          Click any button below, then press a <strong>Keyboard Key</strong> or <strong>Mouse Button</strong> to assign it.
+        </p>
+
+        <div id="keybindList" class="space-y-2">
+          <!-- Populated dynamically by JS -->
+        </div>
+
+        <div class="pt-2 flex justify-between items-center">
+          <button onclick="resetPCKeybinds()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-slate-700">
+            Reset Default Keys
+          </button>
+          <span class="text-[11px] text-slate-400">Aiming uses Mouse Cursor</span>
+        </div>
+      </div>
+
+      <!-- Tab 3: Mobile Controls Setup -->
+      <div id="tabContentMobile" class="hidden space-y-3 text-xs overflow-y-auto pr-1">
+        <div class="flex items-center justify-between bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+          <div>
+            <div class="font-bold text-white text-sm">Show Mobile Touch Controls</div>
+            <div class="text-slate-400">Joysticks, Fire Button & Action Buttons</div>
+          </div>
+          <button id="toggleTouchBtn" onclick="cycleTouchMode()" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 font-bold text-amber-300">
+            Auto
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+          <div>
+            <div class="font-bold text-white text-sm">Right Aim Stick Auto-Fire</div>
+            <div class="text-slate-400">Shoot automatically when pulling aim stick, or use only the Fire Button</div>
+          </div>
+          <input type="checkbox" id="mobAutoFireCheckbox" checked onchange="toggleMobileAutoFire(this.checked)"
+            class="w-5 h-5 accent-amber-400 rounded cursor-pointer" />
+        </div>
+
+        <div class="flex items-center justify-between bg-slate-900/90 p-3 rounded-xl border border-slate-800">
+          <div>
+            <div class="font-bold text-white text-sm">Floating vs Fixed Joysticks</div>
+            <div class="text-slate-400">Fixed keeps joysticks at your custom position</div>
+          </div>
+          <button id="stickModeBtn" onclick="toggleStickAnchorMode()" class="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 font-bold text-sky-300">
+            Fixed Position
+          </button>
+        </div>
+
+        <button onclick="enterMobileLayoutEditor()" class="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-black tracking-wide text-xs shadow-lg hover:brightness-110 transition">
+          ✥ CUSTOMIZE MOBILE BUTTON & JOYSTICK POSITIONS
+        </button>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="mt-5 pt-3 border-t border-slate-800 flex justify-end">
+        <button onclick="closeSettings()" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider transition">
+          SAVE & RESUME GAME
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start / Game Over Modal -->
+  <div id="menuModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-30 p-4">
+    <div class="glass max-w-md w-full rounded-2xl p-6 md:p-7 text-center border border-slate-700 shadow-2xl">
+      <div class="inline-block px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold tracking-widest uppercase mb-2">
+        PC & Mobile Tactical Shooter
+      </div>
+      <h1 id="modalTitle" class="text-3xl md:text-4xl font-black tracking-tight text-white mb-2">OUTPOST BLITZ</h1>
+      <p id="modalSub" class="text-slate-300 text-xs md:text-sm mb-4">
+        Scavenge ground weapons, configure your custom PC keys or Mobile HUD buttons, and survive hostile waves.
+      </p>
+
+      <!-- Player Name Input & Quick Sound Setting -->
+      <div class="bg-slate-900/90 rounded-xl p-4 mb-4 text-left border border-slate-800 space-y-3">
+        <div>
+          <label for="startPlayerName" class="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+            Operative Name (Shown While Running)
+          </label>
+          <input id="startPlayerName" type="text" maxlength="16" value="SHADOW" placeholder="Enter your name..."
+            class="w-full px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white font-bold text-sm focus:outline-none focus:border-amber-400" />
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+          <span class="text-xs font-bold text-slate-300">🔊 Enable Sound Effects</span>
+          <input type="checkbox" id="startSoundCheckbox" checked onchange="syncStartSoundToggle(this.checked)"
+            class="w-4 h-4 accent-emerald-500 rounded cursor-pointer" />
+        </div>
+      </div>
+
+      <div class="flex gap-2 mb-4">
+        <button onclick="openSettings('pc')" class="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-sky-300 transition">
+          ⌨️ Configure PC Keys
+        </button>
+        <button onclick="openSettings('mobile')" class="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-amber-300 transition">
+          📱 Configure Mobile HUD
+        </button>
+      </div>
+
+      <button id="startBtn" onclick="startGame()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black tracking-wide text-base shadow-lg hover:brightness-110 active:scale-98 transition">
+        DEPLOY TO ARENA
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const miniCanvas = document.getElementById('minimapCanvas');
+    const miniCtx = miniCanvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // ==========================================
+    // 1. CUSTOM PC KEYBINDS CONFIGURATION
+    // ==========================================
+    const DEFAULT_KEYBINDS = {
+      up: 'w',
+      down: 's',
+      left: 'a',
+      right: 'd',
+      fire: 'mouse0', // Left mouse button or keyboard key like 'space'
+      reload: 'r',
+      pickup: 'e',
+      swap: 'q',
+      slot1: '1',
+      slot2: '2'
+    };
+
+    const KEYBIND_LABELS = {
+      up: 'Move Up',
+      down: 'Move Down',
+      left: 'Move Left',
+      right: 'Move Right',
+      fire: 'Fire Weapon',
+      reload: 'Reload Weapon',
+      pickup: 'Pick Up Ground Gun',
+      swap: 'Swap Equipped Gun',
+      slot1: 'Weapon Slot 1',
+      slot2: 'Weapon Slot 2'
+    };
+
+    let keybinds = JSON.parse(localStorage.getItem('ob_keybinds') || 'null') || { ...DEFAULT_KEYBINDS };
+    let listeningAction = null;
+
+    function formatKeyName(code) {
+      if (!code) return 'NONE';
+      if (code === 'mouse0') return 'LEFT CLICK';
+      if (code === 'mouse2') return 'RIGHT CLICK';
+      if (code === ' ') return 'SPACE';
+      return code.toUpperCase();
+    }
+
+    function saveKeybinds() {
+      localStorage.setItem('ob_keybinds', JSON.stringify(keybinds));
+      updateHUDKeyLabels();
+      renderKeybindList();
+    }
+
+    function resetPCKeybinds() {
+      keybinds = { ...DEFAULT_KEYBINDS };
+      listeningAction = null;
+      saveKeybinds();
+    }
+
+    function updateHUDKeyLabels() {
+      document.getElementById('promptPickupKey').textContent = formatKeyName(keybinds.pickup);
+      document.getElementById('hudReloadKey').textContent = formatKeyName(keybinds.reload);
+      document.getElementById('hudSlot1Key').textContent = formatKeyName(keybinds.slot1);
+      document.getElementById('hudSlot2Key').textContent = formatKeyName(keybinds.slot2);
+    }
+
+    function renderKeybindList() {
+      const container = document.getElementById('keybindList');
+      container.innerHTML = '';
+      Object.keys(KEYBIND_LABELS).forEach(action => {
+        const isListening = listeningAction === action;
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-800';
+        row.innerHTML = `
+          <span class="font-bold text-slate-200">${KEYBIND_LABELS[action]}</span>
+          <button onclick="startKeybindListen('${action}')"
+            class="px-3 py-1 rounded-lg font-mono font-bold text-xs border transition ${
+              isListening
+                ? 'bg-amber-500 text-slate-950 border-amber-300 animate-pulse'
+                : 'bg-slate-800 text-amber-300 border-slate-600 hover:bg-slate-700'
+            }">
+            ${isListening ? 'PRESS KEY / CLICK...' : formatKeyName(keybinds[action])}
+          </button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function startKeybindListen(action) {
+      listeningAction = action;
+      renderKeybindList();
+    }
+
+    // ==========================================
+    // 2. MOBILE CONTROLS & LAYOUT CUSTOMIZATION
+    // ==========================================
+    const DEFAULT_MOBILE_LAYOUT = {
+      scale: 100,
+      autoFireStick: true,
+      fixedSticks: true,
+      positions: {
+        moveStick: { left: '35px', bottom: '40px', right: 'auto', top: 'auto' },
+        aimStick: { right: '135px', bottom: '38px', left: 'auto', top: 'auto' },
+        fireBtn: { right: '28px', bottom: '115px', left: 'auto', top: 'auto' },
+        reloadBtn: { right: '34px', bottom: '212px', left: 'auto', top: 'auto' },
+        swapBtn: { right: '110px', bottom: '185px', left: 'auto', top: 'auto' },
+        pickupBtn: { right: '190px', bottom: '165px', left: 'auto', top: 'auto' }
+      }
+    };
+
+    let mobileConfig = JSON.parse(localStorage.getItem('ob_mobile_cfg') || 'null') || JSON.parse(JSON.stringify(DEFAULT_MOBILE_LAYOUT));
+    let isEditingMobileLayout = false;
+    let mobileFireHeld = false;
+
+    const MOB_ELEMENT_MAP = {
+      moveStick: 'mobMoveAnchor',
+      aimStick: 'mobAimAnchor',
+      fireBtn: 'mobFireBtn',
+      reloadBtn: 'mobReloadBtn',
+      swapBtn: 'mobSwapBtn',
+      pickupBtn: 'mobPickupBtn'
+    };
+
+    function applyMobileLayout() {
+      Object.keys(MOB_ELEMENT_MAP).forEach(key => {
+        const el = document.getElementById(MOB_ELEMENT_MAP[key]);
+        const pos = mobileConfig.positions[key];
+        if (el && pos) {
+          el.style.left = pos.left;
+          el.style.right = pos.right;
+          el.style.top = pos.top;
+          el.style.bottom = pos.bottom;
+          el.style.transform = `scale(${mobileConfig.scale / 100})`;
+        }
+      });
+
+      document.getElementById('mobScaleSlider').value = mobileConfig.scale;
+      document.getElementById('mobScaleLabel').textContent = `${mobileConfig.scale}%`;
+      document.getElementById('mobAutoFireCheckbox').checked = mobileConfig.autoFireStick;
+      document.getElementById('stickModeBtn').textContent = mobileConfig.fixedSticks ? 'Fixed Position' : 'Floating Touch';
+    }
+
+    function saveMobileConfig() {
+      localStorage.setItem('ob_mobile_cfg', JSON.stringify(mobileConfig));
+    }
+
+    function updateMobileButtonScale(val) {
+      mobileConfig.scale = parseInt(val, 10);
+      applyMobileLayout();
+      saveMobileConfig();
+    }
+
+    function toggleMobileAutoFire(checked) {
+      mobileConfig.autoFireStick = checked;
+      saveMobileConfig();
+    }
+
+    function toggleStickAnchorMode() {
+      mobileConfig.fixedSticks = !mobileConfig.fixedSticks;
+      applyMobileLayout();
+      saveMobileConfig();
+    }
+
+    function resetMobileLayout() {
+      mobileConfig = JSON.parse(JSON.stringify(DEFAULT_MOBILE_LAYOUT));
+      applyMobileLayout();
+      saveMobileConfig();
+    }
+
+    function enterMobileLayoutEditor() {
+      touchOverride = true;
+      updateTouchUIVisibility();
+      document.getElementById('settingsModal').classList.add('hidden');
+      document.getElementById('layoutEditorBanner').classList.remove('hidden');
+      document.getElementById('mobPickupBtn').classList.remove('hidden');
+      isEditingMobileLayout = true;
+
+      Object.values(MOB_ELEMENT_MAP).forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.add('editing-outline');
+        el.classList.remove('pointer-events-none');
+        el.classList.add('pointer-events-auto');
+      });
+    }
+
+    function exitMobileLayoutEditor() {
+      isEditingMobileLayout = false;
+      document.getElementById('layoutEditorBanner').classList.add('hidden');
+
+      Object.entries(MOB_ELEMENT_MAP).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        el.classList.remove('editing-outline');
+        if (key === 'moveStick' || key === 'aimStick') {
+          el.classList.remove('pointer-events-auto');
+          el.classList.add('pointer-events-none');
+        }
+      });
+
+      if (!nearestGunItem) {
+        document.getElementById('mobPickupBtn').classList.add('hidden');
+      }
+      saveMobileConfig();
+      openSettings('mobile');
+    }
+
+    // Setup Drag-and-Drop for Mobile Elements during Layout Edit Mode
+    function initMobileInteractiveButtons() {
+      let dragTarget = null;
+      let dragKey = null;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      function startDrag(clientX, clientY, target) {
+        if (!isEditingMobileLayout) return;
+        dragTarget = target;
+        dragKey = target.dataset.id;
+        const rect = target.getBoundingClientRect();
+        offsetX = clientX - rect.left;
+        offsetY = clientY - rect.top;
+      }
+
+      function moveDrag(clientX, clientY) {
+        if (!dragTarget || !isEditingMobileLayout) return;
+        const x = Math.max(8, Math.min(window.innerWidth - dragTarget.offsetWidth - 8, clientX - offsetX));
+        const y = Math.max(8, Math.min(window.innerHeight - dragTarget.offsetHeight - 8, clientY - offsetY));
+        dragTarget.style.left = `${x}px`;
+        dragTarget.style.top = `${y}px`;
+        dragTarget.style.right = 'auto';
+        dragTarget.style.bottom = 'auto';
+
+        mobileConfig.positions[dragKey] = {
+          left: `${x}px`,
+          top: `${y}px`,
+          right: 'auto',
+          bottom: 'auto'
+        };
+      }
+
+      function endDrag() {
+        if (dragTarget) {
+          saveMobileConfig();
+          dragTarget = null;
+          dragKey = null;
+        }
+      }
+
+      Object.values(MOB_ELEMENT_MAP).forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('mousedown', e => {
+          if (isEditingMobileLayout) {
+            e.stopPropagation();
+            startDrag(e.clientX, e.clientY, el);
+          }
+        });
+        el.addEventListener('touchstart', e => {
+          if (isEditingMobileLayout) {
+            e.stopPropagation();
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            startDrag(t.clientX, t.clientY, el);
+          }
+        }, { passive: false });
+      });
+
+      window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('touchmove', e => {
+        if (isEditingMobileLayout && dragTarget) {
+          const t = e.changedTouches[0];
+          moveDrag(t.clientX, t.clientY);
+        }
+      }, { passive: false });
+      window.addEventListener('touchend', endDrag);
+
+      // Gameplay bindings for Mobile Buttons (when NOT editing layout)
+      const fireBtn = document.getElementById('mobFireBtn');
+      fireBtn.addEventListener('touchstart', e => {
+        if (isEditingMobileLayout) return;
+        e.preventDefault();
+        e.stopPropagation();
+        initAudio();
+        mobileFireHeld = true;
+        tryShoot();
+      }, { passive: false });
+      fireBtn.addEventListener('touchend', e => {
+        if (isEditingMobileLayout) return;
+        e.preventDefault();
+        mobileFireHeld = false;
+      });
+      fireBtn.addEventListener('mousedown', e => {
+        if (isEditingMobileLayout) return;
+        e.stopPropagation();
+        mobileFireHeld = true;
+        tryShoot();
+      });
+      fireBtn.addEventListener('mouseup', () => { mobileFireHeld = false; });
+
+      document.getElementById('mobReloadBtn').addEventListener('click', () => {
+        if (!isEditingMobileLayout) reloadWeapon();
+      });
+      document.getElementById('mobSwapBtn').addEventListener('click', () => {
+        if (!isEditingMobileLayout) cycleWeapon();
+      });
+      document.getElementById('mobPickupBtn').addEventListener('click', () => {
+        if (!isEditingMobileLayout) interactPickup();
+      });
+    }
+
+    // ==========================================
+    // 3. PROCEDURAL WEB AUDIO SOUND ENGINE
+    // ==========================================
+    const SoundSettings = {
+      enabled: localStorage.getItem('ob_sound_enabled') !== 'false',
+      volume: parseFloat(localStorage.getItem('ob_sound_vol') || '0.7')
+    };
+
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playSound(type) {
+      if (!SoundSettings.enabled || SoundSettings.volume <= 0) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const masterGain = audioCtx.createGain();
+      masterGain.gain.value = SoundSettings.volume;
+      masterGain.connect(audioCtx.destination);
+
+      if (type === 'pistol' || type === 'smg' || type === 'rifle') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type === 'rifle' ? 'sawtooth' : 'triangle';
+        const startFreq = type === 'pistol' ? 220 : (type === 'smg' ? 280 : 180);
+        osc.frequency.setValueAtTime(startFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(45, now + 0.09);
+
+        gain.gain.setValueAtTime(0.45, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.09);
+
+        playNoiseBurst(0.07, 0.25, masterGain);
+      } else if (type === 'shotgun') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.22);
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.22);
+
+        playNoiseBurst(0.18, 0.5, masterGain);
+      } else if (type === 'sniper') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(65, now + 0.28);
+        gain.gain.setValueAtTime(0.55, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.28);
+
+        playNoiseBurst(0.22, 0.45, masterGain);
+      } else if (type === 'plasma') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(680, now);
+        osc.frequency.exponentialRampToValueAtTime(110, now + 0.24);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.24);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.24);
+      } else if (type === 'explosion') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(95, now);
+        osc.frequency.exponentialRampToValueAtTime(22, now + 0.45);
+        gain.gain.setValueAtTime(0.7, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.45);
+
+        playNoiseBurst(0.4, 0.65, masterGain);
+      } else if (type === 'reload') {
+        [0, 0.14].forEach((offset, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(idx === 0 ? 420 : 580, now + offset);
+          gain.gain.setValueAtTime(0.28, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + offset + 0.06);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.06);
+        });
+      } else if (type === 'pickup') {
+        [330, 490, 660].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+          gain.gain.setValueAtTime(0.28, now + idx * 0.055);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.055 + 0.09);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(now + idx * 0.055);
+          osc.stop(now + idx * 0.055 + 0.09);
+        });
+      } else if (type === 'hit') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.exponentialRampToValueAtTime(70, now + 0.05);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } else if (type === 'wave') {
+        [260, 390, 520].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          gain.gain.setValueAtTime(0.32, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.2);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(now + idx * 0.12);
+          osc.stop(now + idx * 0.12 + 0.2);
+        });
+      }
+    }
+
+    function playNoiseBurst(duration, gainLevel, destination) {
+      const bufferSize = audioCtx.sampleRate * duration;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 900;
+
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(gainLevel, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(destination);
+      noise.start();
+    }
+
+    // ==========================================
+    // 4. SETTINGS UI & PLAYER NAME
+    // ==========================================
+    let playerName = localStorage.getItem('ob_player_name') || 'SHADOW';
+    document.getElementById('startPlayerName').value = playerName;
+
+    function switchSettingsTab(tab) {
+      const tabs = ['general', 'pc', 'mobile'];
+      tabs.forEach(t => {
+        const content = document.getElementById(`tabContent${t === 'pc' ? 'PC' : t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const btn = document.getElementById(`tabBtn${t === 'pc' ? 'PC' : t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (t === tab) {
+          content.classList.remove('hidden');
+          btn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 transition';
+        } else {
+          content.classList.add('hidden');
+          btn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition';
+        }
+      });
+      listeningAction = null;
+      renderKeybindList();
+    }
+
+    function syncSoundUI() {
+      document.getElementById('soundToggleCheckbox').checked = SoundSettings.enabled;
+      document.getElementById('startSoundCheckbox').checked = SoundSettings.enabled;
+      document.getElementById('volumeSlider').value = Math.round(SoundSettings.volume * 100);
+      document.getElementById('volumeLabel').textContent = `${Math.round(SoundSettings.volume * 100)}%`;
+
+      const quickBtn = document.getElementById('quickSoundBtn');
+      if (SoundSettings.enabled && SoundSettings.volume > 0) {
+        quickBtn.textContent = '🔊 ON';
+        quickBtn.className = 'glass px-2.5 py-1.5 rounded-lg text-xs font-bold text-emerald-400 hover:bg-slate-800 active:scale-95 transition';
+      } else {
+        quickBtn.textContent = '🔇 OFF';
+        quickBtn.className = 'glass px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-400 hover:bg-slate-800 active:scale-95 transition';
+      }
+    }
+
+    function syncStartSoundToggle(checked) {
+      SoundSettings.enabled = checked;
+      localStorage.setItem('ob_sound_enabled', checked);
+      syncSoundUI();
+      if (checked) playSound('pickup');
+    }
+
+    function toggleSoundQuick() {
+      SoundSettings.enabled = !SoundSettings.enabled;
+      localStorage.setItem('ob_sound_enabled', SoundSettings.enabled);
+      syncSoundUI();
+      if (SoundSettings.enabled) playSound('pickup');
+    }
+
+    function updateSettingsFromUI() {
+      SoundSettings.enabled = document.getElementById('soundToggleCheckbox').checked;
+      SoundSettings.volume = parseInt(document.getElementById('volumeSlider').value, 10) / 100;
+      localStorage.setItem('ob_sound_enabled', SoundSettings.enabled);
+      localStorage.setItem('ob_sound_vol', SoundSettings.volume);
+      syncSoundUI();
+    }
+
+    function testAudioSample() {
+      initAudio();
+      playSound('rifle');
+    }
+
+    let pausedBySettings = false;
+    function openSettings(defaultTab = 'general') {
+      if (gameRunning) {
+        pausedBySettings = true;
+        gameRunning = false;
+      }
+      document.getElementById('settingsNameInput').value = playerName;
+      syncSoundUI();
+      renderKeybindList();
+      switchSettingsTab(defaultTab);
+      document.getElementById('settingsModal').classList.remove('hidden');
+    }
+
+    function closeSettings() {
+      listeningAction = null;
+      const entered = document.getElementById('settingsNameInput').value.trim();
+      if (entered) {
+        playerName = entered.toUpperCase();
+        localStorage.setItem('ob_player_name', playerName);
+        document.getElementById('startPlayerName').value = playerName;
+        document.getElementById('hudPlayerName').textContent = playerName;
+      }
+      document.getElementById('settingsModal').classList.add('hidden');
+      if (pausedBySettings) {
+        pausedBySettings = false;
+        gameRunning = true;
+      }
+    }
+
+    // ==========================================
+    // 5. WORLD & WEAPONS CONFIGURATION
+    // ==========================================
+    const WORLD_SIZE = 2600;
+
+    const WEAPON_DB = {
+      pistol: {
+        id: 'pistol',
+        name: 'Combat Pistol',
+        color: '#94a3b8',
+        damage: 24,
+        fireRate: 240,
+        magSize: 15,
+        reserveMax: 999,
+        infiniteReserve: true,
+        reloadTime: 1000,
+        bulletSpeed: 13,
+        spread: 0.05,
+        pellets: 1,
+        range: 700,
+        automatic: false
+      },
+      smg: {
+        id: 'smg',
+        name: 'Vector SMG',
+        color: '#38bdf8',
+        damage: 17,
+        fireRate: 85,
+        magSize: 32,
+        reserveMax: 160,
+        infiniteReserve: false,
+        reloadTime: 1350,
+        bulletSpeed: 14,
+        spread: 0.14,
+        pellets: 1,
+        range: 620,
+        automatic: true
+      },
+      rifle: {
+        id: 'rifle',
+        name: 'Pulse Assault Rifle',
+        color: '#4ade80',
+        damage: 30,
+        fireRate: 130,
+        magSize: 30,
+        reserveMax: 150,
+        infiniteReserve: false,
+        reloadTime: 1500,
+        bulletSpeed: 16,
+        spread: 0.06,
+        pellets: 1,
+        range: 880,
+        automatic: true
+      },
+      shotgun: {
+        id: 'shotgun',
+        name: 'Breacher Shotgun',
+        color: '#fb923c',
+        damage: 20,
+        fireRate: 720,
+        magSize: 8,
+        reserveMax: 48,
+        infiniteReserve: false,
+        reloadTime: 1850,
+        bulletSpeed: 12,
+        spread: 0.28,
+        pellets: 7,
+        range: 460,
+        automatic: false
+      },
+      sniper: {
+        id: 'sniper',
+        name: 'Rail Sniper',
+        color: '#c084fc',
+        damage: 115,
+        fireRate: 950,
+        magSize: 5,
+        reserveMax: 25,
+        infiniteReserve: false,
+        reloadTime: 2100,
+        bulletSpeed: 24,
+        spread: 0.008,
+        pellets: 1,
+        range: 1350,
+        pierce: 3,
+        automatic: false
+      },
+      plasma: {
+        id: 'plasma',
+        name: 'Plasma Launcher',
+        color: '#f43f5e',
+        damage: 85,
+        fireRate: 820,
+        magSize: 6,
+        reserveMax: 24,
+        infiniteReserve: false,
+        reloadTime: 2200,
+        bulletSpeed: 10,
+        spread: 0.04,
+        pellets: 1,
+        range: 800,
+        explosiveRadius: 105,
+        automatic: false
+      }
+    };
+
+    const LOOT_GUN_KEYS = ['smg', 'rifle', 'shotgun', 'sniper', 'plasma'];
+
+    // Game State
+    let gameRunning = false;
+    let score = 0;
+    let kills = 0;
+    let wave = 1;
+    let enemiesToSpawn = 0;
+    let spawnTimer = 0;
+    let screenShake = 0;
+
+    // Input State
+    const activeInputs = {};
+    const mouse = { x: 0, y: 0, worldX: 0, worldY: 0 };
+    let isTouchMode = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    let touchOverride = null;
+
+    // Virtual Joysticks
+    const leftStick = { active: false, id: null, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, maxDist: 52 };
+    const rightStick = { active: false, id: null, startX: 0, startY: 0, curX: 0, curY: 0, dx: 0, dy: 0, maxDist: 52 };
+
+    // Entities
+    let player;
+    let bullets = [];
+    let enemies = [];
+    let groundItems = [];
+    let obstacles = [];
+    let particles = [];
+    let floatingTexts = [];
+    let nearestGunItem = null;
+
+    function createWeaponInstance(key) {
+      const proto = WEAPON_DB[key];
+      return {
+        ...proto,
+        mag: proto.magSize,
+        reserve: proto.reserveMax,
+        reloading: false,
+        reloadStart: 0
+      };
+    }
+
+    function initWorld() {
+      player = {
+        x: WORLD_SIZE / 2,
+        y: WORLD_SIZE / 2,
+        radius: 20,
+        speed: 4.5,
+        angle: 0,
+        moving: false,
+        walkCycle: 0,
+        hp: 100,
+        maxHp: 100,
+        armor: 50,
+        maxArmor: 100,
+        weapons: [createWeaponInstance('pistol'), null],
+        activeSlot: 0,
+        lastShot: 0
+      };
+
+      bullets = [];
+      enemies = [];
+      groundItems = [];
+      obstacles = [];
+      particles = [];
+      floatingTexts = [];
+      score = 0;
+      kills = 0;
+      wave = 1;
+      enemiesToSpawn = 8;
+
+      for (let i = 0; i < 38; i++) {
+        let w = 70 + Math.random() * 110;
+        let h = 70 + Math.random() * 110;
+        let x = 150 + Math.random() * (WORLD_SIZE - 300 - w);
+        let y = 150 + Math.random() * (WORLD_SIZE - 300 - h);
+        if (Math.hypot((x + w / 2) - player.x, (y + h / 2) - player.y) < 260) continue;
+        obstacles.push({ x, y, w, h });
+      }
+
+      for (let i = 0; i < 16; i++) {
+        spawnRandomGroundGun(i < 4);
+      }
+
+      for (let i = 0; i < 12; i++) {
+        spawnSupplyItem();
+      }
+
+      document.getElementById('hudPlayerName').textContent = playerName;
+      updateHUDKeyLabels();
+      updateHUD();
+      updateTouchUIVisibility();
+      syncSoundUI();
+    }
+
+    function getSafeCoordinates(nearPlayer = false) {
+      for (let attempt = 0; attempt < 30; attempt++) {
+        let x, y;
+        if (nearPlayer) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = 140 + Math.random() * 260;
+          x = player.x + Math.cos(ang) * dist;
+          y = player.y + Math.sin(ang) * dist;
+        } else {
+          x = 120 + Math.random() * (WORLD_SIZE - 240);
+          y = 120 + Math.random() * (WORLD_SIZE - 240);
+        }
+        let insideObstacle = obstacles.some(o => x > o.x - 35 && x < o.x + o.w + 35 && y > o.y - 35 && y < o.y + o.h + 35);
+        if (!insideObstacle) return { x, y };
+      }
+      return { x: player.x + 120, y: player.y + 120 };
+    }
+
+    function spawnRandomGroundGun(nearPlayer = false) {
+      const pos = getSafeCoordinates(nearPlayer);
+      const gunKey = LOOT_GUN_KEYS[Math.floor(Math.random() * LOOT_GUN_KEYS.length)];
+      groundItems.push({
+        type: 'weapon',
+        weapon: createWeaponInstance(gunKey),
+        x: pos.x,
+        y: pos.y,
+        radius: 22,
+        bobOffset: Math.random() * Math.PI * 2
+      });
+    }
+
+    function spawnSupplyItem(x, y) {
+      const pos = (x !== undefined && y !== undefined) ? { x, y } : getSafeCoordinates(false);
+      const types = ['medkit', 'ammo', 'armor'];
+      const kind = types[Math.floor(Math.random() * types.length)];
+      groundItems.push({
+        type: kind,
+        x: pos.x,
+        y: pos.y,
+        radius: 18,
+        bobOffset: Math.random() * Math.PI * 2
+      });
+    }
+
+    function isMobileUIActive() {
+      return touchOverride !== null ? touchOverride : isTouchMode;
+    }
+
+    function updateTouchUIVisibility() {
+      const active = isMobileUIActive();
+      const container = document.getElementById('mobileControlsContainer');
+      const toggleBtn = document.getElementById('toggleTouchBtn');
+      if (active) {
+        container.classList.remove('hidden');
+      } else {
+        container.classList.add('hidden');
+      }
+      toggleBtn.textContent = touchOverride === null ? 'Auto' : (touchOverride ? 'ON' : 'OFF');
+    }
+
+    function cycleTouchMode() {
+      if (touchOverride === null) touchOverride = !isTouchMode;
+      else if (touchOverride === true) touchOverride = false;
+      else touchOverride = null;
+      updateTouchUIVisibility();
+    }
+
+    // ==========================================
+    // 6. KEYBOARD, MOUSE & TOUCH LISTENERS
+    // ==========================================
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+
+      // If currently rebinding a PC key in Settings
+      if (listeningAction) {
+        e.preventDefault();
+        if (k !== 'escape') {
+          keybinds[listeningAction] = k;
+          saveKeybinds();
+        }
+        listeningAction = null;
+        renderKeybindList();
+        return;
+      }
+
+      if (k === 'escape') {
+        if (isEditingMobileLayout) {
+          exitMobileLayoutEditor();
+          return;
+        }
+        const modalOpen = !document.getElementById('settingsModal').classList.contains('hidden');
+        if (modalOpen) closeSettings();
+        else if (gameRunning) openSettings();
+        return;
+      }
+
+      activeInputs[k] = true;
+      if (!gameRunning) return;
+
+      if (k === keybinds.fire) tryShoot();
+      if (k === keybinds.reload) reloadWeapon();
+      if (k === keybinds.pickup) interactPickup();
+      if (k === keybinds.swap) cycleWeapon();
+      if (k === keybinds.slot1) switchWeapon(0);
+      if (k === keybinds.slot2) switchWeapon(1);
+    });
+
+    window.addEventListener('keyup', (e) => {
+      activeInputs[e.key.toLowerCase()] = false;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      const mCode = `mouse${e.button}`;
+
+      if (listeningAction) {
+        e.preventDefault();
+        keybinds[listeningAction] = mCode;
+        listeningAction = null;
+        saveKeybinds();
+        return;
+      }
+
+      if (e.target !== canvas) return;
+      activeInputs[mCode] = true;
+      if (mCode === keybinds.fire) {
+        tryShoot();
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      activeInputs[`mouse${e.button}`] = false;
+    });
+
+    function getAnchorCenter(id) {
+      const el = document.getElementById(id);
+      const rect = el.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+
+    // Touch Listeners on Canvas for Dual Virtual Joysticks
+    canvas.addEventListener('touchstart', (e) => {
+      if (isEditingMobileLayout) return;
+      e.preventDefault();
+      initAudio();
+      isTouchMode = true;
+      updateTouchUIVisibility();
+
+      const moveCenter = getAnchorCenter('mobMoveAnchor');
+      const aimCenter = getAnchorCenter('mobAimAnchor');
+
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        const distToMove = Math.hypot(t.clientX - moveCenter.x, t.clientY - moveCenter.y);
+        const distToAim = Math.hypot(t.clientX - aimCenter.x, t.clientY - aimCenter.y);
+
+        // Determine whether touch belongs to Move Stick or Aim Stick
+        if (!leftStick.active && (distToMove < 130 || (t.clientX < window.innerWidth * 0.48 && distToAim >= 120))) {
+          leftStick.active = true;
+          leftStick.id = t.identifier;
+          leftStick.startX = mobileConfig.fixedSticks ? moveCenter.x : t.clientX;
+          leftStick.startY = mobileConfig.fixedSticks ? moveCenter.y : t.clientY;
+          leftStick.curX = t.clientX;
+          leftStick.curY = t.clientY;
+          updateStickDelta(leftStick, t.clientX, t.clientY);
+        } else if (!rightStick.active) {
+          rightStick.active = true;
+          rightStick.id = t.identifier;
+          rightStick.startX = mobileConfig.fixedSticks ? aimCenter.x : t.clientX;
+          rightStick.startY = mobileConfig.fixedSticks ? aimCenter.y : t.clientY;
+          rightStick.curX = t.clientX;
+          rightStick.curY = t.clientY;
+          updateStickDelta(rightStick, t.clientX, t.clientY);
+        }
+      }
+    }, { passive: false });
+
+    function updateStickDelta(stick, clientX, clientY) {
+      const dx = clientX - stick.startX;
+      const dy = clientY - stick.startY;
+      const dist = Math.min(Math.hypot(dx, dy), stick.maxDist);
+      const ang = Math.atan2(dy, dx);
+      stick.curX = stick.startX + Math.cos(ang) * dist;
+      stick.curY = stick.startY + Math.sin(ang) * dist;
+      stick.dx = (Math.cos(ang) * dist) / stick.maxDist;
+      stick.dy = (Math.sin(ang) * dist) / stick.maxDist;
+    }
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (isEditingMobileLayout) return;
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (leftStick.active && t.identifier === leftStick.id) {
+          updateStickDelta(leftStick, t.clientX, t.clientY);
+        }
+        if (rightStick.active && t.identifier === rightStick.id) {
+          updateStickDelta(rightStick, t.clientX, t.clientY);
+        }
+      }
+    }, { passive: false });
+
+    function endTouch(e) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (leftStick.active && t.identifier === leftStick.id) {
+          leftStick.active = false;
+          leftStick.dx = 0;
+          leftStick.dy = 0;
+        }
+        if (rightStick.active && t.identifier === rightStick.id) {
+          rightStick.active = false;
+          rightStick.dx = 0;
+          rightStick.dy = 0;
+        }
+      }
+    }
+    canvas.addEventListener('touchend', endTouch);
+    canvas.addEventListener('touchcancel', endTouch);
+
+    // ==========================================
+    // 7. WEAPON & COMBAT LOGIC
+    // ==========================================
+    function getActiveWeapon() {
+      return player.weapons[player.activeSlot];
+    }
+
+    function switchWeapon(slot) {
+      if (!gameRunning) return;
+      if (player.weapons[slot] && player.activeSlot !== slot) {
+        player.activeSlot = slot;
+        playSound('reload');
+        updateHUD();
+      }
+    }
+
+    function cycleWeapon() {
+      const next = player.activeSlot === 0 ? 1 : 0;
+      if (player.weapons[next]) switchWeapon(next);
+    }
+
+    function reloadWeapon() {
+      if (!gameRunning) return;
+      const gun = getActiveWeapon();
+      if (!gun || gun.reloading || gun.mag === gun.magSize) return;
+      if (!gun.infiniteReserve && gun.reserve <= 0) {
+        addFloatingText(player.x, player.y - 38, 'NO RESERVE AMMO!', '#f43f5e');
+        return;
+      }
+      gun.reloading = true;
+      gun.reloadStart = performance.now();
+      playSound('reload');
+      addFloatingText(player.x, player.y - 38, 'RELOADING...', '#38bdf8');
+      updateHUD();
+    }
+
+    function interactPickup() {
+      if (!gameRunning || !nearestGunItem) return;
+      const pickedWeapon = nearestGunItem.weapon;
+      playSound('pickup');
+
+      const existingSlot = player.weapons.findIndex(w => w && w.id === pickedWeapon.id);
+      if (existingSlot !== -1) {
+        const w = player.weapons[existingSlot];
+        w.reserve = Math.min(w.reserveMax, w.reserve + pickedWeapon.magSize * 2);
+        addFloatingText(player.x, player.y - 38, `+${pickedWeapon.name} AMMO`, '#4ade80');
+        groundItems = groundItems.filter(i => i !== nearestGunItem);
+        nearestGunItem = null;
+        updateHUD();
+        return;
+      }
+
+      if (!player.weapons[1]) {
+        player.weapons[1] = pickedWeapon;
+        player.activeSlot = 1;
+        groundItems = groundItems.filter(i => i !== nearestGunItem);
+      } else {
+        const droppedWeapon = player.weapons[player.activeSlot];
+        droppedWeapon.reloading = false;
+        player.weapons[player.activeSlot] = pickedWeapon;
+        nearestGunItem.weapon = droppedWeapon;
+      }
+
+      addFloatingText(player.x, player.y - 42, `EQUIPPED ${pickedWeapon.name.toUpperCase()}`, pickedWeapon.color);
+      nearestGunItem = null;
+      updateHUD();
+    }
+
+    function tryShoot() {
+      if (!gameRunning) return;
+      const gun = getActiveWeapon();
+      if (!gun || gun.reloading) return;
+
+      const now = performance.now();
+      if (now - player.lastShot < gun.fireRate) return;
+
+      if (gun.mag <= 0) {
+        reloadWeapon();
+        return;
+      }
+
+      player.lastShot = now;
+      gun.mag--;
+      playSound(gun.id);
+
+      screenShake = Math.min(10, screenShake + (gun.id === 'shotgun' || gun.id === 'sniper' || gun.id === 'plasma' ? 5 : 2));
+
+      const muzzleX = player.x + Math.cos(player.angle) * 28;
+      const muzzleY = player.y + Math.sin(player.angle) * 28;
+
+      for (let i = 0; i < gun.pellets; i++) {
+        const spreadAngle = player.angle + (Math.random() - 0.5) * gun.spread * 2;
+        bullets.push({
+          x: muzzleX,
+          y: muzzleY,
+          vx: Math.cos(spreadAngle) * gun.bulletSpeed,
+          vy: Math.sin(spreadAngle) * gun.bulletSpeed,
+          damage: gun.damage,
+          color: gun.color,
+          range: gun.range,
+          traveled: 0,
+          pierce: gun.pierce || 1,
+          explosiveRadius: gun.explosiveRadius || 0,
+          fromPlayer: true
+        });
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const ang = player.angle + (Math.random() - 0.5) * 0.6;
+        const spd = 2 + Math.random() * 4;
+        particles.push({
+          x: muzzleX,
+          y: muzzleY,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          radius: 2 + Math.random() * 2,
+          color: gun.color,
+          alpha: 1,
+          decay: 0.08
+        });
+      }
+
+      if (gun.mag === 0) reloadWeapon();
+      updateHUD();
+    }
+
+    function triggerExplosion(x, y, radius, damage) {
+      screenShake = 12;
+      playSound('explosion');
+      for (let i = 0; i < 28; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 1 + Math.random() * 6;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          radius: 4 + Math.random() * 5,
+          color: i % 2 === 0 ? '#f43f5e' : '#fb923c',
+          alpha: 1,
+          decay: 0.03
+        });
+      }
+
+      enemies.forEach(en => {
+        const dist = Math.hypot(en.x - x, en.y - y);
+        if (dist <= radius) {
+          en.hp -= damage * (1 - dist / (radius * 1.2));
+        }
+      });
+    }
+
+    function spawnEnemy() {
+      const edgeAngle = Math.random() * Math.PI * 2;
+      const spawnDist = 650 + Math.random() * 250;
+      const x = Math.max(60, Math.min(WORLD_SIZE - 60, player.x + Math.cos(edgeAngle) * spawnDist));
+      const y = Math.max(60, Math.min(WORLD_SIZE - 60, player.y + Math.sin(edgeAngle) * spawnDist));
+
+      const r = Math.random();
+      let type = 'grunt';
+      if (wave >= 2 && r > 0.65) type = 'runner';
+      if (wave >= 3 && r > 0.82) type = 'tank';
+      if (wave >= 2 && r > 0.45 && r <= 0.65) type = 'shooter';
+
+      const presets = {
+        grunt: { radius: 18, speed: 2.3 + wave * 0.08, hp: 55 + wave * 10, color: '#ef4444', score: 25, ranged: false },
+        runner: { radius: 14, speed: 3.7 + wave * 0.1, hp: 35 + wave * 6, color: '#f59e0b', score: 35, ranged: false },
+        tank: { radius: 26, speed: 1.45 + wave * 0.05, hp: 160 + wave * 30, color: '#7c3aed', score: 70, ranged: false },
+        shooter: { radius: 18, speed: 2.0 + wave * 0.06, hp: 50 + wave * 8, color: '#ec4899', score: 45, ranged: true }
+      };
+
+      const cfg = presets[type];
+      enemies.push({
+        x, y,
+        type,
+        radius: cfg.radius,
+        speed: cfg.speed,
+        hp: cfg.hp,
+        maxHp: cfg.hp,
+        color: cfg.color,
+        score: cfg.score,
+        ranged: cfg.ranged,
+        lastShot: performance.now() + Math.random() * 1000
+      });
+    }
+
+    function resolveObstacleCollision(entity) {
+      for (const obs of obstacles) {
+        const closestX = Math.max(obs.x, Math.min(entity.x, obs.x + obs.w));
+        const closestY = Math.max(obs.y, Math.min(entity.y, obs.y + obs.h));
+        const dx = entity.x - closestX;
+        const dy = entity.y - closestY;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < entity.radius * entity.radius) {
+          const dist = Math.sqrt(distSq) || 0.001;
+          const overlap = entity.radius - dist;
+          entity.x += (dx / dist) * overlap;
+          entity.y += (dy / dist) * overlap;
+        }
+      }
+      entity.x = Math.max(entity.radius, Math.min(WORLD_SIZE - entity.radius, entity.x));
+      entity.y = Math.max(entity.radius, Math.min(WORLD_SIZE - entity.radius, entity.y));
+    }
+
+    function addFloatingText(x, y, text, color = '#ffffff') {
+      floatingTexts.push({ x, y, text, color, alpha: 1, vy: -1.1 });
+    }
+
+    function damagePlayer(amount) {
+      if (player.armor > 0) {
+        const absorbed = Math.min(player.armor, amount * 0.65);
+        player.armor -= absorbed;
+        player.hp -= (amount - absorbed);
+      } else {
+        player.hp -= amount;
+      }
+      screenShake = 8;
+      updateHUD();
+
+      if (player.hp <= 0) {
+        player.hp = 0;
+        playSound('explosion');
+        gameOver();
+      }
+    }
+
+    function updateHUD() {
+      document.getElementById('hpText').textContent = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+      document.getElementById('hpBar').style.width = `${(player.hp / player.maxHp) * 100}%`;
+      document.getElementById('armorText').textContent = `${Math.ceil(player.armor)} / ${player.maxArmor}`;
+      document.getElementById('armorBar').style.width = `${(player.armor / player.maxArmor) * 100}%`;
+
+      document.getElementById('waveText').textContent = wave;
+      document.getElementById('scoreText').textContent = score;
+      document.getElementById('killsText').textContent = kills;
+
+      for (let i = 0; i < 2; i++) {
+        const w = player.weapons[i];
+        const card = document.getElementById(`slot${i}`);
+        const nameEl = document.getElementById(`slot${i}Name`);
+        const ammoEl = document.getElementById(`slot${i}Ammo`);
+        const typeEl = document.getElementById(`slot${i}Type`);
+
+        if (player.activeSlot === i) {
+          card.classList.add('border-amber-400');
+          card.classList.remove('border-transparent', 'opacity-75');
+        } else {
+          card.classList.remove('border-amber-400');
+          card.classList.add('border-transparent', 'opacity-75');
+        }
+
+        if (w) {
+          nameEl.textContent = w.name;
+          nameEl.style.color = w.color;
+          ammoEl.textContent = w.reloading
+            ? 'RELOADING...'
+            : `${w.mag} / ${w.infiniteReserve ? '∞' : w.reserve}`;
+          typeEl.textContent = w.automatic ? 'AUTO' : 'SEMI';
+        } else {
+          nameEl.textContent = 'Empty Slot';
+          nameEl.style.color = '#94a3b8';
+          ammoEl.textContent = '-- / --';
+          typeEl.textContent = '-';
+        }
+      }
+    }
+
+    // ==========================================
+    // 8. MAIN UPDATE LOOP
+    // ==========================================
+    function update(now) {
+      if (!gameRunning) return;
+
+      const activeGun = getActiveWeapon();
+      if (activeGun && activeGun.reloading) {
+        if (now - activeGun.reloadStart >= activeGun.reloadTime) {
+          const needed = activeGun.magSize - activeGun.mag;
+          if (activeGun.infiniteReserve) {
+            activeGun.mag = activeGun.magSize;
+          } else {
+            const take = Math.min(needed, activeGun.reserve);
+            activeGun.mag += take;
+            activeGun.reserve -= take;
+          }
+          activeGun.reloading = false;
+          playSound('reload');
+          updateHUD();
+        }
+      }
+
+      // Movement via User-Configured PC Keys or Mobile Move Joystick
+      let moveX = 0;
+      let moveY = 0;
+      if (activeInputs[keybinds.up]) moveY -= 1;
+      if (activeInputs[keybinds.down]) moveY += 1;
+      if (activeInputs[keybinds.left]) moveX -= 1;
+      if (activeInputs[keybinds.right]) moveX += 1;
+
+      if (leftStick.active) {
+        moveX = leftStick.dx;
+        moveY = leftStick.dy;
+      } else if (moveX !== 0 || moveY !== 0) {
+        const len = Math.hypot(moveX, moveY);
+        moveX /= len;
+        moveY /= len;
+      }
+
+      player.moving = Math.hypot(moveX, moveY) > 0.08;
+      if (player.moving) {
+        player.walkCycle += 0.22;
+        if (Math.random() < 0.28) {
+          particles.push({
+            x: player.x - moveX * 14 + (Math.random() - 0.5) * 10,
+            y: player.y - moveY * 14 + (Math.random() - 0.5) * 10,
+            vx: (Math.random() - 0.5) * 0.6,
+            vy: (Math.random() - 0.5) * 0.6,
+            radius: 2 + Math.random() * 2,
+            color: '#64748b',
+            alpha: 0.55,
+            decay: 0.04
+          });
+        }
+      }
+
+      player.x += moveX * player.speed;
+      player.y += moveY * player.speed;
+      resolveObstacleCollision(player);
+
+      // Aiming & Firing
+      const camX = player.x - canvas.width / 2;
+      const camY = player.y - canvas.height / 2;
+      mouse.worldX = mouse.x + camX;
+      mouse.worldY = mouse.y + camY;
+
+      if (rightStick.active && Math.hypot(rightStick.dx, rightStick.dy) > 0.15) {
+        player.angle = Math.atan2(rightStick.dy, rightStick.dx);
+        if (mobileConfig.autoFireStick && Math.hypot(rightStick.dx, rightStick.dy) > 0.38) {
+          tryShoot();
+        }
+      } else if (!isMobileUIActive()) {
+        player.angle = Math.atan2(mouse.worldY - player.y, mouse.worldX - player.x);
+      }
+
+      // Continuous fire if holding PC Fire key/button or Mobile Fire button
+      if ((activeInputs[keybinds.fire] && activeGun && activeGun.automatic) || mobileFireHeld) {
+        tryShoot();
+      }
+
+      // Ground Loot Proximity
+      nearestGunItem = null;
+      let minGunDist = 58;
+
+      for (let i = groundItems.length - 1; i >= 0; i--) {
+        const item = groundItems[i];
+        const dist = Math.hypot(player.x - item.x, player.y - item.y);
+
+        if (item.type === 'weapon') {
+          if (dist < minGunDist) {
+            minGunDist = dist;
+            nearestGunItem = item;
+          }
+        } else if (dist < player.radius + item.radius) {
+          if (item.type === 'medkit' && player.hp < player.maxHp) {
+            player.hp = Math.min(player.maxHp, player.hp + 35);
+            playSound('pickup');
+            addFloatingText(player.x, player.y - 35, '+35 HP', '#10b981');
+            groundItems.splice(i, 1);
+            updateHUD();
+          } else if (item.type === 'armor' && player.armor < player.maxArmor) {
+            player.armor = Math.min(player.maxArmor, player.armor + 40);
+            playSound('pickup');
+            addFloatingText(player.x, player.y - 35, '+40 ARMOR', '#38bdf8');
+            groundItems.splice(i, 1);
+            updateHUD();
+          } else if (item.type === 'ammo') {
+            player.weapons.forEach(w => {
+              if (w && !w.infiniteReserve) {
+                w.reserve = Math.min(w.reserveMax, w.reserve + w.magSize * 2);
+              }
+            });
+            playSound('pickup');
+            addFloatingText(player.x, player.y - 35, '+AMMO CRATE', '#facc15');
+            groundItems.splice(i, 1);
+            updateHUD();
+          }
+        }
+      }
+
+      const promptEl = document.getElementById('pickupPrompt');
+      const mobilePickupBtn = document.getElementById('mobPickupBtn');
+      if (nearestGunItem) {
+        promptEl.classList.remove('hidden');
+        document.getElementById('pickupGunName').textContent = nearestGunItem.weapon.name;
+        document.getElementById('pickupGunName').style.color = nearestGunItem.weapon.color;
+        mobilePickupBtn.classList.remove('hidden');
+      } else if (!isEditingMobileLayout) {
+        promptEl.classList.add('hidden');
+        mobilePickupBtn.classList.add('hidden');
+      }
+
+      // Bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        b.traveled += Math.hypot(b.vx, b.vy);
+
+        const hitObstacle = obstacles.some(o => b.x >= o.x && b.x <= o.x + o.w && b.y >= o.y && b.y <= o.y + o.h);
+        if (hitObstacle || b.traveled >= b.range || b.x < 0 || b.x > WORLD_SIZE || b.y < 0 || b.y > WORLD_SIZE) {
+          if (b.explosiveRadius > 0) triggerExplosion(b.x, b.y, b.explosiveRadius, b.damage);
+          bullets.splice(i, 1);
+          continue;
+        }
+
+        if (b.fromPlayer) {
+          for (let j = enemies.length - 1; j >= 0; j--) {
+            const en = enemies[j];
+            if (Math.hypot(b.x - en.x, b.y - en.y) < en.radius + 5) {
+              if (b.explosiveRadius > 0) {
+                triggerExplosion(b.x, b.y, b.explosiveRadius, b.damage);
+                bullets.splice(i, 1);
+                break;
+              } else {
+                en.hp -= b.damage;
+                b.pierce--;
+                playSound('hit');
+                for (let k = 0; k < 4; k++) {
+                  particles.push({
+                    x: b.x, y: b.y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    radius: 2.5,
+                    color: en.color,
+                    alpha: 1,
+                    decay: 0.07
+                  });
+                }
+                if (b.pierce <= 0) {
+                  bullets.splice(i, 1);
+                  break;
+                }
+              }
+            }
+          }
+        } else {
+          if (Math.hypot(b.x - player.x, b.y - player.y) < player.radius + 4) {
+            playSound('hit');
+            damagePlayer(b.damage);
+            bullets.splice(i, 1);
+          }
+        }
+      }
+
+      if (enemiesToSpawn > 0 && now - spawnTimer > 950) {
+        spawnEnemy();
+        enemiesToSpawn--;
+        spawnTimer = now;
+      }
+
+      if (enemiesToSpawn === 0 && enemies.length === 0) {
+        wave++;
+        enemiesToSpawn = 7 + wave * 4;
+        spawnRandomGroundGun(true);
+        spawnSupplyItem();
+        playSound('wave');
+        addFloatingText(player.x, player.y - 50, `WAVE ${wave} INCOMING!`, '#facc15');
+        updateHUD();
+      }
+
+      // Enemies
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const en = enemies[i];
+        if (en.hp <= 0) {
+          score += en.score;
+          kills++;
+          if (Math.random() < 0.22) spawnSupplyItem(en.x, en.y);
+          else if (Math.random() < 0.12) {
+            const gKey = LOOT_GUN_KEYS[Math.floor(Math.random() * LOOT_GUN_KEYS.length)];
+            groundItems.push({
+              type: 'weapon',
+              weapon: createWeaponInstance(gKey),
+              x: en.x,
+              y: en.y,
+              radius: 22,
+              bobOffset: Math.random() * Math.PI * 2
+            });
+          }
+          enemies.splice(i, 1);
+          updateHUD();
+          continue;
+        }
+
+        const ang = Math.atan2(player.y - en.y, player.x - en.x);
+        const distToPlayer = Math.hypot(player.x - en.x, player.y - en.y);
+
+        if (en.ranged && distToPlayer < 360 && distToPlayer > 180) {
+          en.x += Math.cos(ang + Math.PI / 2) * (en.speed * 0.6);
+          en.y += Math.sin(ang + Math.PI / 2) * (en.speed * 0.6);
+        } else {
+          en.x += Math.cos(ang) * en.speed;
+          en.y += Math.sin(ang) * en.speed;
+        }
+
+        resolveObstacleCollision(en);
+
+        if (en.ranged && distToPlayer < 480 && now - en.lastShot > 1700) {
+          en.lastShot = now;
+          playSound('pistol');
+          bullets.push({
+            x: en.x,
+            y: en.y,
+            vx: Math.cos(ang) * 7.5,
+            vy: Math.sin(ang) * 7.5,
+            damage: 12 + wave * 1.5,
+            color: '#f43f5e',
+            range: 550,
+            traveled: 0,
+            pierce: 1,
+            fromPlayer: false
+          });
+        }
+
+        if (distToPlayer < player.radius + en.radius) {
+          damagePlayer(0.45);
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= p.decay;
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y += ft.vy;
+        ft.alpha -= 0.02;
+        if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+      }
+
+      if (screenShake > 0) screenShake *= 0.85;
+      if (screenShake < 0.3) screenShake = 0;
+    }
+
+    // ==========================================
+    // 9. RENDER LOOP
+    // ==========================================
+    function draw(now) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!player) return;
+
+      const shakeX = (Math.random() - 0.5) * screenShake * 2;
+      const shakeY = (Math.random() - 0.5) * screenShake * 2;
+      const camX = player.x - canvas.width / 2 + shakeX;
+      const camY = player.y - canvas.height / 2 + shakeY;
+
+      ctx.save();
+      ctx.translate(-camX, -camY);
+
+      // Floor Grid
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2;
+      const gridStep = 80;
+      for (let x = 0; x <= WORLD_SIZE; x += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, WORLD_SIZE);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= WORLD_SIZE; y += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(WORLD_SIZE, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+
+      // Ground Items
+      groundItems.forEach(item => {
+        const bob = Math.sin(now * 0.005 + item.bobOffset) * 4;
+        ctx.save();
+        ctx.translate(item.x, item.y + bob);
+
+        if (item.type === 'weapon') {
+          const w = item.weapon;
+          ctx.beginPath();
+          ctx.arc(0, 0, item.radius + 4, 0, Math.PI * 2);
+          ctx.fillStyle = w.color + '28';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = w.color;
+          ctx.stroke();
+
+          ctx.fillStyle = w.color;
+          ctx.fillRect(-14, -4, 28, 7);
+          ctx.fillRect(-6, 3, 6, 8);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(6, -3, 8, 3);
+
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillText(w.name, 0, -28);
+        } else {
+          const colors = { medkit: '#10b981', ammo: '#facc15', armor: '#38bdf8' };
+          const labels = { medkit: '+HP', ammo: 'AMMO', armor: 'SHIELD' };
+          ctx.fillStyle = colors[item.type];
+          ctx.beginPath();
+          ctx.roundRect(-14, -14, 28, 28, 6);
+          ctx.fill();
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(labels[item.type], 0, 3);
+        }
+        ctx.restore();
+      });
+
+      // Obstacles
+      obstacles.forEach(o => {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(o.x, o.y, o.w, o.h);
+      });
+
+      // Bullets
+      bullets.forEach(b => {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.explosiveRadius ? 6 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = b.color;
+        ctx.fill();
+      });
+
+      // Enemies
+      enemies.forEach(en => {
+        ctx.save();
+        ctx.translate(en.x, en.y);
+        ctx.beginPath();
+        ctx.arc(0, 0, en.radius, 0, Math.PI * 2);
+        ctx.fillStyle = en.color;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#0f172a';
+        ctx.stroke();
+
+        if (en.hp < en.maxHp) {
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(-18, -en.radius - 12, 36, 5);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(-18, -en.radius - 12, 36 * (en.hp / en.maxHp), 5);
+        }
+        ctx.restore();
+      });
+
+      // Player Body & Gun
+      const activeGun = getActiveWeapon();
+      const runBob = player.moving ? Math.sin(player.walkCycle) * 2.2 : 0;
+
+      ctx.save();
+      ctx.translate(player.x, player.y + runBob);
+      ctx.rotate(player.angle);
+
+      if (activeGun && activeGun.id === 'sniper') {
+        ctx.beginPath();
+        ctx.moveTo(25, 0);
+        ctx.lineTo(650, 0);
+        ctx.strokeStyle = 'rgba(192, 132, 252, 0.28)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = activeGun ? activeGun.color : '#94a3b8';
+      ctx.fillRect(10, -5, 22, 10);
+
+      ctx.beginPath();
+      ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.stroke();
+      ctx.restore();
+
+      // Floating Player Name Badge While Running
+      ctx.save();
+      ctx.font = 'bold 12px "Segoe UI", sans-serif';
+      const textWidth = ctx.measureText(playerName).width;
+      const badgeW = textWidth + 18;
+      const badgeH = 20;
+      const badgeX = player.x - badgeW / 2;
+      const badgeY = player.y - player.radius - 30 + (player.moving ? Math.sin(player.walkCycle) * 1.5 : 0);
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+      ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+      ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(playerName, player.x, badgeY + badgeH / 2 + 0.5);
+      ctx.restore();
+
+      // Reload Ring
+      if (activeGun && activeGun.reloading) {
+        const progress = Math.min(1, (now - activeGun.reloadStart) / activeGun.reloadTime);
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius + 9, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      // Particles
+      particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      // Floating Texts
+      floatingTexts.forEach(ft => {
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, ft.x, ft.y);
+      });
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+
+      // Draw Active Mobile Joystick Knobs over their customized anchor positions
+      if (isMobileUIActive() && !isEditingMobileLayout) {
+        const moveCenter = getAnchorCenter('mobMoveAnchor');
+        const aimCenter = getAnchorCenter('mobAimAnchor');
+        drawJoystickKnob(leftStick, '#38bdf8', moveCenter.x, moveCenter.y);
+        drawJoystickKnob(rightStick, '#f43f5e', aimCenter.x, aimCenter.y);
+      }
+
+      drawMinimap();
+    }
+
+    function drawJoystickKnob(stick, color, defaultX, defaultY) {
+      const baseX = stick.active ? stick.startX : defaultX;
+      const baseY = stick.active ? stick.startY : defaultY;
+      const knobX = stick.active ? stick.curX : defaultX;
+      const knobY = stick.active ? stick.curY : defaultY;
+
+      ctx.save();
+      if (stick.active && !mobileConfig.fixedSticks) {
+        ctx.beginPath();
+        ctx.arc(baseX, baseY, stick.maxDist, 0, Math.PI * 2);
+        ctx.strokeStyle = color + '77';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(knobX, knobY, 22 * (mobileConfig.scale / 100), 0, Math.PI * 2);
+      ctx.fillStyle = color + 'cc';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMinimap() {
+      miniCtx.clearRect(0, 0, miniCanvas.width, miniCanvas.height);
+      const scale = miniCanvas.width / WORLD_SIZE;
+
+      miniCtx.fillStyle = '#475569';
+      obstacles.forEach(o => {
+        miniCtx.fillRect(o.x * scale, o.y * scale, o.w * scale, o.h * scale);
+      });
+
+      groundItems.forEach(item => {
+        if (item.type === 'weapon') {
+          miniCtx.fillStyle = item.weapon.color;
+          miniCtx.fillRect(item.x * scale - 1.5, item.y * scale - 1.5, 3, 3);
+        }
+      });
+
+      miniCtx.fillStyle = '#ef4444';
+      enemies.forEach(en => {
+        miniCtx.beginPath();
+        miniCtx.arc(en.x * scale, en.y * scale, 2, 0, Math.PI * 2);
+        miniCtx.fill();
+      });
+
+      miniCtx.fillStyle = '#38bdf8';
+      miniCtx.beginPath();
+      miniCtx.arc(player.x * scale, player.y * scale, 3, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+
+    function startGame() {
+      initAudio();
+      const inputName = document.getElementById('startPlayerName').value.trim();
+      playerName = (inputName || 'SHADOW').toUpperCase();
+      localStorage.setItem('ob_player_name', playerName);
+
+      document.getElementById('menuModal').classList.add('hidden');
+      initWorld();
+      playSound('wave');
+      gameRunning = true;
+    }
+
+    function gameOver() {
+      gameRunning = false;
+      mobileFireHeld = false;
+      const modal = document.getElementById('menuModal');
+      modal.classList.remove('hidden');
+      document.getElementById('modalTitle').textContent = 'MISSION FAILED';
+      document.getElementById('modalSub').innerHTML =
+        `Operative <strong class="text-sky-400">${playerName}</strong> survived until <strong class="text-amber-400">Wave ${wave}</strong> with <strong class="text-rose-400">${kills} Kills</strong> and a score of <strong class="text-white">${score}</strong>.`;
+      document.getElementById('startBtn').textContent = 'REDEPLOY TO ARENA';
+    }
+
+    function loop(now) {
+      update(now);
+      draw(now);
+      requestAnimationFrame(loop);
+    }
+
+    applyMobileLayout();
+    initMobileInteractiveButtons();
+    initWorld();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
